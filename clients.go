@@ -13,10 +13,10 @@ type ClientStatus int
 // )
 
 type Client struct {
+	*Device
 	deviceId  string
 	apiKey    string
 	ipAddress string
-	device    *Device
 	// status    ClientStatus
 }
 
