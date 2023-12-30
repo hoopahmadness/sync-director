@@ -1,11 +1,19 @@
 package main
 
 import (
-	"fmt"
-	"sync"
+	"crypto/tls"
+	"encoding/json"
+	"io"
+	"net/http"
 )
 
 type ClientStatus int
+
+type ConnectedDevicesResponse struct {
+	Connections map[string]struct {
+		Address string
+	}
+}
 
 // const (
 // 	NOTFOUND = iota
@@ -17,6 +25,8 @@ type Client struct {
 	deviceId  string
 	apiKey    string
 	ipAddress string
+	nickname  string
+	client    *http.Client
 	// status    ClientStatus
 }
 
@@ -41,69 +51,134 @@ func (client *Client) addDevice(name, id string) {
 	*/
 }
 
-func (client *Client) getConnectedDeviceIPs() map[string]string {
-	//  rest/system/connections
-	return map[string]string{}
+// func (client *Client) getConnectedDeviceIPs() (map[string]string, error) {
+// 	fmt.Println("Getting connected devices")
+// 	//  rest/system/connections
+// 	message, err := client.get(client.generateURL("/rest/system/connections"))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	response := &ConnectedDevicesResponse{}
+// 	connections := map[string]string{}
+// 	err = json.Unmarshal(message, &response)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	fmt.Println(response.Connections["LANYALJ-PJIJXP2-MXWY52F-G7GUU5W-QS6PTAS-K26GPCZ-DFP3GSF-DKDXSAL"].Address)
+// 	fmt.Println("yo")
+// 	for id, devInfo := range response.Connections {
+// 		if devInfo.Address != "" {
+// 			fmt.Println("Got an IP!")
+// 			fmt.Println(id)
+// 			fmt.Println(devInfo.Address)
+// 			connections[id] = devInfo.Address
+// 		}
+// 	}
+// 	return connections, err
+// }
+
+func (client *Client) generateURL(endpoint string) string {
+	return "https://" + client.ipAddress + endpoint
 }
 
 func (client *Client) ping() {}
 
-func findIPs(clients map[string]*Client, lock *sync.RWMutex) {
-	fmt.Println("Entering findIPs")
-	fmt.Println(clients)
-	if lock == nil {
-		lock = &sync.RWMutex{}
+func (client *Client) get(endpoint string) (json.RawMessage, error) {
+	client.initHttp()
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
 	}
-
-	lock.RLock()
-	if len(clients) == 0 {
-		lock.RUnlock()
-		fmt.Println("length of clients is 0, returning")
-		return
+	req.Header.Add("X-API-Key", client.apiKey)
+	resp, err := client.client.Do(req)
+	if err != nil {
+		return nil, err
 	}
-	IDs := make([]string, len(clients))
-	ii := 0
-	for id, _ := range clients {
-		IDs[ii] = id
-		ii++
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
-	lock.RUnlock()
-	fmt.Println("got list of client IDs")
-	fmt.Println(IDs)
-
-	for _, id := range IDs {
-		lock.Lock()
-		fmt.Println("Locking map for client")
-		fmt.Println(id)
-		client, OK := clients[id]
-		if !OK {
-			lock.Unlock()
-			fmt.Println("client no longer exists in map, moving on")
-			continue
-		}
-		if client.ipAddress == "" {
-			lock.Unlock()
-			fmt.Println("Client has no IP yet, moving on")
-			continue
-		}
-		delete(clients, id)
-		lock.Unlock()
-		fmt.Println("Unlocked the map")
-		connectedIPs := client.getConnectedDeviceIPs()
-		for deviceID, IP := range connectedIPs {
-			lock.Lock()
-			fmt.Println("Locking map for other device")
-			fmt.Println(deviceID)
-			otherDeviceClient, OK := clients[deviceID]
-			if OK {
-				println("Updating the IP for this device")
-				otherDeviceClient.ipAddress = IP
-			}
-			lock.Unlock()
-			println("Unlocked, moving on to next returned device ID")
-		}
-		println("Moving on to the next client ID")
-	}
-	println("recursing")
-	findIPs(clients, lock)
+	obj := json.RawMessage(body)
+	return obj, nil
 }
+
+func (client *Client) initHttp() {
+	if client.client == nil {
+		customTransport := http.DefaultTransport.(*http.Transport).Clone()
+		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		client.client = &http.Client{Transport: customTransport}
+	}
+}
+
+// func findIPs(clients map[string]*Client, lock *sync.RWMutex) {
+// 	fmt.Println("Entering findIPs")
+// 	fmt.Println(clients)
+// 	if lock == nil {
+// 		lock = &sync.RWMutex{}
+// 	}
+// 	cameInWithOne := len(clients) == 1
+
+// 	lock.RLock()
+// 	if len(clients) == 0 {
+// 		lock.RUnlock()
+// 		fmt.Println("length of clients is 0, returning")
+// 		return
+// 	}
+// 	IDs := make([]string, len(clients))
+// 	ii := 0
+// 	for id, _ := range clients {
+// 		IDs[ii] = id
+// 		ii++
+// 	}
+// 	lock.RUnlock()
+// 	fmt.Println("got list of client IDs")
+// 	fmt.Println(IDs)
+
+// 	for _, id := range IDs {
+// 		lock.Lock()
+// 		fmt.Println("Locking map for client in loop:")
+// 		fmt.Println(id)
+// 		client, OK := clients[id]
+// 		if !OK {
+// 			lock.Unlock()
+// 			fmt.Println("client no longer exists in map, moving on")
+// 			continue
+// 		}
+// 		if client.ipAddress == "" {
+// 			lock.Unlock()
+// 			fmt.Println("Client has no IP yet, moving on")
+// 			continue
+// 		}
+// 		delete(clients, id)
+// 		lock.Unlock()
+// 		fmt.Println("Unlocked the map")
+// 		connectedIPs, err := client.getConnectedDeviceIPs()
+// 		fmt.Println("Connected devices with IPs:")
+// 		fmt.Println(connectedIPs)
+// 		if err != nil {
+// 			fmt.Println(err)
+// 			fmt.Println("Got an error getting connected devices; moving on")
+// 			continue
+// 		}
+// 		for deviceID, IP := range connectedIPs {
+// 			lock.Lock()
+// 			fmt.Println("Locking map for other device")
+// 			fmt.Println(deviceID)
+// 			otherDeviceClient, OK := clients[deviceID]
+// 			if OK {
+// 				println("Updating the IP for this device")
+// 				otherDeviceClient.ipAddress = IP
+// 			}
+// 			lock.Unlock()
+// 			println("Unlocked, moving on to next returned device ID")
+// 		}
+// 		println("Moving on to the next client ID")
+// 	}
+// 	if len(clients) == 1 && cameInWithOne {
+// 		fmt.Println("we haven't improved the list any, we should stop recursiving")
+// 		return
+// 	}
+// 	println("recursing")
+// 	findIPs(clients, lock)
+// }
