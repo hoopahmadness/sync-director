@@ -3,11 +3,19 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
 
 type ClientStatus int
+
+const (
+	UNKNOWN = iota
+	CONNECTED
+	OFFLINE
+	OUTOFNETWORK
+)
 
 type ConnectedDevicesResponse struct {
 	Connections map[string]struct {
@@ -15,19 +23,68 @@ type ConnectedDevicesResponse struct {
 	}
 }
 
-// const (
-// 	NOTFOUND = iota
-// 	CONNECTED
-// )
+// top level is map of folder IDs to OfferedByObject
+// OfferedBy is a map of the other device ID to some extraneous details
+type GetPendingFoldersResponse map[string]struct {
+	OfferedBy map[string]struct {
+		Label string
+	}
+}
 
+type GetFolderResponse []*struct {
+	Id      string
+	Label   string
+	Path    string
+	Type    string
+	Devices []struct {
+		DeviceID string
+	}
+	// SharedDevices map[string]struct {
+	// 	Pending bool
+	// }
+
+}
+
+// Clients live inside of a Device and do all of the HTTP related dirty work.
+// the parentDevice field is just for convenience because we want Clients to be able to set
+// pointers to its parent in folders, etc
 type Client struct {
-	*Device
-	deviceId  string
-	apiKey    string
-	ipAddress string
-	nickname  string
-	client    *http.Client
-	// status    ClientStatus
+	deviceId     string
+	apiKey       string
+	ipAddress    string
+	nickname     string
+	client       *http.Client
+	parentDevice *Device
+	status       ClientStatus
+}
+
+func (client *Client) querySyncedFolders() (GetFolderResponse, error) {
+	/*	/rest/config/folders
+
+		GET returns all folders respectively devices as an array. PUT takes an array and POST a single object. In both cases if a given folder/device already exists, it’s replaced, otherwise a new one is added.
+	*/
+	message, err := client.get(client.generateURL("/rest/config/folders"))
+	if err != nil {
+		return nil, err
+	}
+	response := GetFolderResponse{}
+	err = json.Unmarshal(message, &response)
+	return response, err
+}
+
+func (client *Client) queryPendingFolders() (GetPendingFoldersResponse, error) {
+	// rest/cluster/pending/folders
+	fmt.Println("Getting folders")
+	message, err := client.get(client.generateURL("/rest/cluster/pending/folders"))
+	if err != nil {
+		return nil, err
+	}
+	response := GetPendingFoldersResponse{}
+	err = json.Unmarshal(message, &response)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (client *Client) addFolder(name, id, path string) {
