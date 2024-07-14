@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type ClientStatus int
@@ -25,6 +26,7 @@ type ConnectedDevicesResponse struct {
 
 // top level is map of folder IDs to OfferedByObject
 // OfferedBy is a map of the other device ID to some extraneous details
+// Label is ???
 type GetPendingFoldersResponse map[string]struct {
 	OfferedBy map[string]struct {
 		Label string
@@ -39,10 +41,6 @@ type GetFolderResponse []*struct {
 	Devices []struct {
 		DeviceID string
 	}
-	// SharedDevices map[string]struct {
-	// 	Pending bool
-	// }
-
 }
 
 // Clients live inside of a Device and do all of the HTTP related dirty work.
@@ -58,11 +56,31 @@ type Client struct {
 	status       ClientStatus
 }
 
+func newClient(device *Device, nickname string) *Client {
+	c := &Client{
+		nickname:     nickname,
+		status:       OUTOFNETWORK,
+		parentDevice: device,
+	}
+	return c
+}
+
+func (client *Client) addToNetwork(deviceID, apikey, ipAddress string) {
+	client.deviceId = deviceID
+	client.apiKey = apikey
+	client.ipAddress = ipAddress
+	client.status = OFFLINE
+	client.ping()
+}
+
 func (client *Client) querySyncedFolders() (GetFolderResponse, error) {
 	/*	/rest/config/folders
 
 		GET returns all folders respectively devices as an array. PUT takes an array and POST a single object. In both cases if a given folder/device already exists, it’s replaced, otherwise a new one is added.
 	*/
+	if client.status == OUTOFNETWORK || client.status == OFFLINE {
+		return GetFolderResponse{}, nil
+	}
 	message, err := client.get(client.generateURL("/rest/config/folders"))
 	if err != nil {
 		return nil, err
@@ -74,6 +92,9 @@ func (client *Client) querySyncedFolders() (GetFolderResponse, error) {
 
 func (client *Client) queryPendingFolders() (GetPendingFoldersResponse, error) {
 	// rest/cluster/pending/folders
+	if client.status == OUTOFNETWORK || client.status == OFFLINE {
+		return GetPendingFoldersResponse{}, nil
+	}
 	fmt.Println("Getting folders")
 	message, err := client.get(client.generateURL("/rest/cluster/pending/folders"))
 	if err != nil {
@@ -108,37 +129,41 @@ func (client *Client) addDevice(name, id string) {
 	*/
 }
 
-// func (client *Client) getConnectedDeviceIPs() (map[string]string, error) {
-// 	fmt.Println("Getting connected devices")
-// 	//  rest/system/connections
-// 	message, err := client.get(client.generateURL("/rest/system/connections"))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	response := &ConnectedDevicesResponse{}
-// 	connections := map[string]string{}
-// 	err = json.Unmarshal(message, &response)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	fmt.Println(response.Connections["LANYALJ-PJIJXP2-MXWY52F-G7GUU5W-QS6PTAS-K26GPCZ-DFP3GSF-DKDXSAL"].Address)
-// 	fmt.Println("yo")
-// 	for id, devInfo := range response.Connections {
-// 		if devInfo.Address != "" {
-// 			fmt.Println("Got an IP!")
-// 			fmt.Println(id)
-// 			fmt.Println(devInfo.Address)
-// 			connections[id] = devInfo.Address
-// 		}
-// 	}
-// 	return connections, err
-// }
+func (client *Client) queryConnectedDevices() (*ConnectedDevicesResponse, error) {
+	//  rest/system/connections
+	if client.status == OUTOFNETWORK || client.status == OFFLINE {
+		return nil, nil
+	}
+	message, err := client.get(client.generateURL("/rest/system/connections"))
+	if err != nil {
+		return nil, err
+	}
+	response := &ConnectedDevicesResponse{}
+	err = json.Unmarshal(message, &response)
+	return response, err
+}
 
 func (client *Client) generateURL(endpoint string) string {
 	return "https://" + client.ipAddress + endpoint
 }
 
-func (client *Client) ping() {}
+func (client *Client) ping() {
+	/*
+		POST /rest/system/ping
+		Returns a {"ping": "pong"} object.
+	*/
+	fmt.Println("Pinging client")
+	fmt.Println(client.parentDevice.nickname)
+	if client.status == OUTOFNETWORK {
+		return
+	}
+	_, err := client.get(client.generateURL("/rest/system/ping"))
+	if err != nil {
+		client.status = OFFLINE
+		return
+	}
+	client.status = CONNECTED
+}
 
 func (client *Client) get(endpoint string) (json.RawMessage, error) {
 	client.initHttp()
@@ -164,7 +189,7 @@ func (client *Client) initHttp() {
 	if client.client == nil {
 		customTransport := http.DefaultTransport.(*http.Transport).Clone()
 		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		client.client = &http.Client{Transport: customTransport}
+		client.client = &http.Client{Transport: customTransport, Timeout: 10 * time.Second}
 	}
 }
 
