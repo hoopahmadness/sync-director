@@ -2,10 +2,19 @@ package main
 
 import "fmt"
 
+// A Device contains a client for communicating with a specific instance of Syncthing
 type Device struct {
 	*Client
 }
 
+func NewDevice(nickname string) *Device {
+	d := &Device{}
+	c := newClient(d, nickname)
+	d.Client = c
+	return d
+}
+
+// Queries the device client to get a complete list of all synced and pending folders
 func (dev *Device) GetFolders() ([]*Folder, error) {
 	fmt.Println("Getting folders")
 	syncedFolders, err := dev.Client.querySyncedFolders()
@@ -68,12 +77,42 @@ func (dev *Device) GetFolders() ([]*Folder, error) {
 
 }
 
+// Queries the device client to get all connected devices.
+// Also returns pending connections? not sure where I was going with this.
 func (dev *Device) GetConnectedDevices() ([]*Device, error) {
+	fmt.Println("Getting connected devices")
+	fmt.Println(*dev)
+	resp, err := dev.Client.queryConnectedDevices()
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil, err
+	}
+	deviceList := []*Device{}
+	if resp == nil {
+		return deviceList, nil
+	}
+	for id := range resp.Connections {
+		var connectedDevice *Device
+		var exists bool
+		if connectedDevice, exists = devicesById[id]; !exists {
+			connectedDevice = &Device{
+				&Client{
+					deviceId: id,
+					status:   OUTOFNETWORK,
+				},
+			}
+			devicesById[id] = connectedDevice
+		}
+		// dev.ConnectedDevices[connectedDevice] = struct{ Pending bool }{Pending: false}
+		// maybe I'm doing too much in this function and should just return the connected devices
+		deviceList = append(deviceList, connectedDevice)
+	}
+	return deviceList, nil
 
 }
 
 // Device pairs are bidirectional objects that show a relationship between two devices
-// If one of the devices has offerred to share a folder but a second device has not accepted it,
+// If one of the devices has offerred to share a folder or connection but a second device has not accepted it,
 // the *offering* device will be put in the pending slot.
 type DevicePair struct {
 	dev1         *Device
