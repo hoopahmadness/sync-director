@@ -14,7 +14,7 @@ func newNetworkFolder(id string) *NetworkFolder {
 		id:      id,
 		folders: map[*Device]*Folder{},
 	}
-	nf.deviceWeb = webManager.NewDeviceWeb()
+	nf.deviceWeb = newDeviceWeb()
 	return nf
 }
 

@@ -4,7 +4,7 @@ package main
 type DeviceWeb struct {
 	allPairs  map[*DevicePair]bool
 	perDevice map[*Device][]*DevicePair
-	manager   *WebManager
+	// manager   *WebManager
 }
 
 // Given a device, find the other devices that are sharing the folder with it
@@ -19,33 +19,35 @@ func (dw *DeviceWeb) getOtherDevices(aDevice *Device) []*Device {
 	return devices
 }
 
-func (dw *DeviceWeb) getPairing(aDevice, anotherDevice *Device) *DevicePair {
-	pairList := dw.perDevice[aDevice]
-	for _, pair := range pairList {
-		if pair.Other(aDevice) == anotherDevice {
-			return pair
-		}
-	}
-	return nil
-}
-
 // A folder can add a new pairing between two of its devices.
 // In general pairs are bidirectional so it doesn't matter which device is the host;
 // adding the inverse pair will be compared to the existing pair and is a no-op.
-// If the host device has no accepted syncing for a folder from the synced device, set 'pending'
+// If the host device has not accepted syncing for a folder from the synced device, set 'pending'
 // to true and the device pair will show that there is a pending folder.
 func (dw *DeviceWeb) NewDevicePairForFolder(hostDevice, syncedDevice *Device, pending bool) {
-	dp := dw.manager.getDevicePair(hostDevice, syncedDevice)
+	dp := dw.getDevicePair(hostDevice, syncedDevice)
 	if pending {
 		dp.offerPending = syncedDevice
 	}
-	dw.addPairing(dp)
+}
+
+// Create a new connection between devices. All device pairs created this way are pending by defualt.
+// When the inverse pair is created (in other words, when the synced device tries to add a connection
+// to this device) then the connection will no longer be pending
+func (dw *DeviceWeb) NewDeviceConnection(hostDevice, connectedDevice *Device) {
+	dp := dw.getDevicePair(hostDevice, connectedDevice)
+	if dp.offerPending == nil {
+		dp.offerPending = hostDevice
+	} else if dp.offerPending == connectedDevice {
+		dp.offerPending = nil
+	}
 }
 
 // Adds a new DevicePair to the web.
 // Each DevicePair is kept in a map as well as kept in a list for each related device
 // (that's three pointers per pair)
 // Adding an existing pair again is a no-op
+// For now let's assume this is only run internall by the web manager
 func (dw *DeviceWeb) addPairing(pair *DevicePair) {
 	if _, OK := dw.allPairs[pair]; OK {
 		return
@@ -73,51 +75,54 @@ func (dw *DeviceWeb) initializeDevicePairsListIfNeeded(devices ...*Device) {
 	}
 }
 
-// The manager will be a global variable that tracks and disseminates device pairs to sub-webs on a per-folder basis
-// WebManager actually uses a "master" DeviceWeb internally to store all known DevicePair objects
-type WebManager struct {
-	master     *DeviceWeb
-	folderWebs map[*Folder]*DeviceWeb
-}
+// // The manager will be a global variable that tracks and disseminates device pairs to sub-webs on a per-folder basis
+// // WebManager actually uses a "master" DeviceWeb internally to store all known DevicePair objects
+// // WAIT: Why am I globalizing these? Wouldn't the pending field correspond to specific folders, since a device can be pending for one folder but not another?
+// type WebManager struct {
+// 	master     *DeviceWeb
+// 	folderWebs map[*Folder]*DeviceWeb
+// }
 
 // This func should be used by a DeviceWeb to get a pointer to an existing DevicePair
 // If the DevicePair for these devices can't be found it is created.
 // This allows us to guarantee that any pair of devices regardless of order will yield the same object
-func (wm *WebManager) getDevicePair(aDevice, anotherDevice *Device) *DevicePair {
+func (dw *DeviceWeb) getDevicePair(aDevice, anotherDevice *Device) *DevicePair {
 
 	// see if the pair already exists
-	pair := wm.master.getPairing(aDevice, anotherDevice)
-	if pair != nil {
-		return pair
+	pairList := dw.perDevice[aDevice]
+	for _, pair := range pairList {
+		if pair.Other(aDevice) == anotherDevice {
+			return pair
+		}
 	}
 
 	// create it
 	dp := &DevicePair{aDevice, anotherDevice, nil}
-	// add it to the master
-	wm.master.addPairing(dp)
+
+	dw.addPairing(dp)
+
 	return dp
 }
 
-func (wb *WebManager) NewDeviceWeb() *DeviceWeb {
+func newDeviceWeb() *DeviceWeb {
 	newWeb := &DeviceWeb{}
 	newWeb.perDevice = map[*Device][]*DevicePair{}
 	newWeb.allPairs = map[*DevicePair]bool{}
-	newWeb.manager = wb
 	return newWeb
 }
 
-func (wb *WebManager) ProcessNewFolder(folder *Folder) {
-	newWeb := wb.NewDeviceWeb()
-	if folder != nil {
-		wb.folderWebs[folder] = newWeb
-	}
-	// don't we need to do more here? I think there should be some actual processing but I'm not sure off the top of my head what it is
-}
+// func (wb *WebManager) ProcessNewFolder(folder *Folder) {
+// 	newWeb := wb.NewDeviceWeb()
+// 	if folder != nil {
+// 		wb.folderWebs[folder] = newWeb
+// 	}
+// 	// don't we need to do more here? I think there should be some actual processing but I'm not sure off the top of my head what it is
+// }
 
-func newWebManager() *WebManager {
-	newMan := &WebManager{
-		folderWebs: map[*Folder]*DeviceWeb{},
-	}
-	newMan.master = newMan.NewDeviceWeb()
-	return newMan
-}
+// func newWebManager() *WebManager {
+// 	newMan := &WebManager{
+// 		folderWebs: map[*Folder]*DeviceWeb{},
+// 	}
+// 	newMan.master = newMan.NewDeviceWeb()
+// 	return newMan
+// }
