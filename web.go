@@ -1,17 +1,38 @@
 package main
 
+import (
+	"fmt"
+)
+
 // A device web represents a set of links between pairs of devices regarding a given folder
 type DeviceWeb struct {
-	allPairs  map[*DevicePair]bool
-	perDevice map[*Device][]*DevicePair
+	AllPairs  map[*DevicePair]bool
+	PerDevice map[*Device][]*DevicePair
 	// manager   *WebManager
+}
+
+func (dw *DeviceWeb) String() string {
+	webStr := "Device web:\n"
+	for pairing, _ := range dw.AllPairs {
+		firstOffering := ""
+		secondOffering := ""
+		if pairing.OfferPending == pairing.Dev1 {
+			firstOffering = "*"
+		}
+		if pairing.OfferPending == pairing.DevA {
+			secondOffering = "*"
+		}
+		pairStr := fmt.Sprintf("%s%s paired with %s%s\n", pairing.Dev1.Nickname, firstOffering, pairing.DevA.Nickname, secondOffering)
+		webStr += pairStr
+	}
+	return webStr
 }
 
 // Given a device, find the other devices that are sharing the folder with it
 // Does not care if a device is pending or not.
 func (dw *DeviceWeb) getOtherDevices(aDevice *Device) []*Device {
 	dw.initializeDevicePairsListIfNeeded(aDevice)
-	pairs := dw.perDevice[aDevice]
+	pairs := dw.PerDevice[aDevice]
 	devices := []*Device{}
 	for _, pair := range pairs {
 		devices = append(devices, pair.Other(aDevice))
@@ -25,9 +46,13 @@ func (dw *DeviceWeb) getOtherDevices(aDevice *Device) []*Device {
 // If the host device has not accepted syncing for a folder from the synced device, set 'pending'
 // to true and the device pair will show that there is a pending folder.
 func (dw *DeviceWeb) NewDevicePairForFolder(hostDevice, syncedDevice *Device, pending bool) {
-	dp := dw.getDevicePair(hostDevice, syncedDevice)
+	dp, err := dw.getDevicePair(hostDevice, syncedDevice)
+	if err != nil {
+		fmt.Println("A device can't share a folder with itself; skipping")
+		return
+	}
 	if pending {
-		dp.offerPending = syncedDevice
+		dp.OfferPending = syncedDevice
 	}
 }
 
@@ -35,11 +60,16 @@ func (dw *DeviceWeb) NewDevicePairForFolder(hostDevice, syncedDevice *Device, pe
 // When the inverse pair is created (in other words, when the synced device tries to add a connection
 // to this device) then the connection will no longer be pending
 func (dw *DeviceWeb) NewDeviceConnection(hostDevice, connectedDevice *Device) {
-	dp := dw.getDevicePair(hostDevice, connectedDevice)
-	if dp.offerPending == nil {
-		dp.offerPending = hostDevice
-	} else if dp.offerPending == connectedDevice {
-		dp.offerPending = nil
+	dp, err := dw.getDevicePair(hostDevice, connectedDevice)
+	if err != nil {
+		fmt.Println("Can't pair device to itself; skipping")
+		return
+	}
+	if dp.OfferPending == nil {
+		dp.OfferPending = hostDevice
+	} else if dp.OfferPending == connectedDevice {
+		fmt.Println("Accepting pairing offer")
+		dp.OfferPending = nil
 	}
 }
 
@@ -49,28 +79,28 @@ func (dw *DeviceWeb) NewDeviceConnection(hostDevice, connectedDevice *Device) {
 // Adding an existing pair again is a no-op
 // For now let's assume this is only run internall by the web manager
 func (dw *DeviceWeb) addPairing(pair *DevicePair) {
-	if _, OK := dw.allPairs[pair]; OK {
+	if _, OK := dw.AllPairs[pair]; OK {
 		return
 	}
-	aDevice := pair.dev1
-	anotherDevice := pair.devA
+	aDevice := pair.Dev1
+	anotherDevice := pair.DevA
 	dw.initializeDevicePairsListIfNeeded(aDevice, anotherDevice)
-	listforADevice := dw.perDevice[aDevice]
+	listforADevice := dw.PerDevice[aDevice]
 	listforADevice = append(listforADevice, pair)
-	dw.perDevice[aDevice] = listforADevice
+	dw.PerDevice[aDevice] = listforADevice
 
-	listforAnotherDevice := dw.perDevice[anotherDevice]
+	listforAnotherDevice := dw.PerDevice[anotherDevice]
 	listforAnotherDevice = append(listforAnotherDevice, pair)
-	dw.perDevice[anotherDevice] = listforAnotherDevice
+	dw.PerDevice[anotherDevice] = listforAnotherDevice
 
-	dw.allPairs[pair] = true
+	dw.AllPairs[pair] = true
 }
 
 func (dw *DeviceWeb) initializeDevicePairsListIfNeeded(devices ...*Device) {
 	for _, aDevice := range devices {
-		_, OK := dw.perDevice[aDevice]
+		_, OK := dw.PerDevice[aDevice]
 		if !OK {
-			dw.perDevice[aDevice] = []*DevicePair{}
+			dw.PerDevice[aDevice] = []*DevicePair{}
 		}
 	}
 }
@@ -86,28 +116,35 @@ func (dw *DeviceWeb) initializeDevicePairsListIfNeeded(devices ...*Device) {
 // This func should be used by a DeviceWeb to get a pointer to an existing DevicePair
 // If the DevicePair for these devices can't be found it is created.
 // This allows us to guarantee that any pair of devices regardless of order will yield the same object
-func (dw *DeviceWeb) getDevicePair(aDevice, anotherDevice *Device) *DevicePair {
+// Returns error when attempting to pair a device to itself
+func (dw *DeviceWeb) getDevicePair(aDevice, anotherDevice *Device) (*DevicePair, error) {
+	// make sure devices are not the same
+	if aDevice == anotherDevice {
+		return nil, fmt.Errorf("cannot pair two devices that are the same")
+	}
 
 	// see if the pair already exists
-	pairList := dw.perDevice[aDevice]
+	pairList := dw.PerDevice[aDevice]
 	for _, pair := range pairList {
 		if pair.Other(aDevice) == anotherDevice {
-			return pair
+			fmt.Println("Found existing device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
+			return pair, nil
 		}
 	}
 
 	// create it
+	fmt.Println("Creating new device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
 	dp := &DevicePair{aDevice, anotherDevice, nil}
 
 	dw.addPairing(dp)
 
-	return dp
+	return dp, nil
 }
 
 func newDeviceWeb() *DeviceWeb {
 	newWeb := &DeviceWeb{}
-	newWeb.perDevice = map[*Device][]*DevicePair{}
-	newWeb.allPairs = map[*DevicePair]bool{}
+	newWeb.PerDevice = map[*Device][]*DevicePair{}
+	newWeb.AllPairs = map[*DevicePair]bool{}
 	return newWeb
 }
 

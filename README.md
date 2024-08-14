@@ -14,3 +14,5 @@ For each device:
             So instead I think I'll just have completely different device pairs per web. If it blows up later I can come back and optimize this way.
     
     This gives me my list of devices, connections, list of network folders, and the connections for all those folders.
+
+    https://go-echarts.github.io/go-echarts/#/en-us/charts/graph will be what I use to chart the webs.

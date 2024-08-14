@@ -9,13 +9,13 @@ import (
 	"time"
 )
 
-type ClientStatus int
+type ClientStatus string
 
 const (
-	UNKNOWN = iota
-	CONNECTED
-	OFFLINE
-	OUTOFNETWORK
+	UNKNOWN      = "UNKNOWN"
+	CONNECTED    = "CONNECTED"
+	OFFLINE      = "OFFLINE"
+	OUTOFNETWORK = "OUTOFNETWORK"
 )
 
 type ConnectedDevicesResponse struct {
@@ -47,29 +47,34 @@ type GetFolderResponse []*struct {
 // the parentDevice field is just for convenience because we want Clients to be able to set
 // pointers to its parent in folders, etc
 type Client struct {
-	deviceId     string
+	DeviceId     string
 	apiKey       string
-	ipAddress    string
-	nickname     string
+	IpAddress    string
+	Nickname     string
 	client       *http.Client
 	parentDevice *Device
-	status       ClientStatus
+	Status       ClientStatus
 }
 
 func newClient(device *Device, nickname string) *Client {
 	c := &Client{
-		nickname:     nickname,
-		status:       OUTOFNETWORK,
+		Nickname:     nickname,
+		Status:       OUTOFNETWORK,
 		parentDevice: device,
 	}
 	return c
 }
 
+func (c *Client) String() string {
+	b, _ := json.Marshal(c)
+	return string(b)
+}
+
 func (client *Client) addToNetwork(deviceID, apikey, ipAddress string) {
-	client.deviceId = deviceID
+	client.DeviceId = deviceID
 	client.apiKey = apikey
-	client.ipAddress = ipAddress
-	client.status = OFFLINE
+	client.IpAddress = ipAddress
+	client.Status = OFFLINE
 	client.ping()
 }
 
@@ -78,7 +83,7 @@ func (client *Client) querySyncedFolders() (GetFolderResponse, error) {
 
 		GET returns all folders respectively devices as an array. PUT takes an array and POST a single object. In both cases if a given folder/device already exists, it’s replaced, otherwise a new one is added.
 	*/
-	if client.status == OUTOFNETWORK || client.status == OFFLINE {
+	if client.Status == OUTOFNETWORK || client.Status == OFFLINE {
 		return GetFolderResponse{}, nil
 	}
 	message, err := client.get(client.generateURL("/rest/config/folders"))
@@ -92,7 +97,7 @@ func (client *Client) querySyncedFolders() (GetFolderResponse, error) {
 
 func (client *Client) queryPendingFolders() (GetPendingFoldersResponse, error) {
 	// rest/cluster/pending/folders
-	if client.status == OUTOFNETWORK || client.status == OFFLINE {
+	if client.Status == OUTOFNETWORK || client.Status == OFFLINE {
 		return GetPendingFoldersResponse{}, nil
 	}
 	fmt.Println("Getting folders")
@@ -131,20 +136,22 @@ func (client *Client) addDevice(name, id string) {
 
 func (client *Client) queryConnectedDevices() (*ConnectedDevicesResponse, error) {
 	//  rest/system/connections
-	if client.status == OUTOFNETWORK || client.status == OFFLINE {
+	if client.Status == OUTOFNETWORK || client.Status == OFFLINE {
 		return nil, nil
 	}
 	message, err := client.get(client.generateURL("/rest/system/connections"))
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("Here's the response for connected devices")
+	fmt.Println(string(message))
 	response := &ConnectedDevicesResponse{}
 	err = json.Unmarshal(message, &response)
 	return response, err
 }
 
 func (client *Client) generateURL(endpoint string) string {
-	return "https://" + client.ipAddress + endpoint
+	return "https://" + client.IpAddress + endpoint
 }
 
 func (client *Client) ping() {
@@ -153,16 +160,16 @@ func (client *Client) ping() {
 		Returns a {"ping": "pong"} object.
 	*/
 	fmt.Println("Pinging client")
-	fmt.Println(client.parentDevice.nickname)
-	if client.status == OUTOFNETWORK {
+	fmt.Println(client.parentDevice.Nickname)
+	if client.Status == OUTOFNETWORK {
 		return
 	}
 	_, err := client.get(client.generateURL("/rest/system/ping"))
 	if err != nil {
-		client.status = OFFLINE
+		client.Status = OFFLINE
 		return
 	}
-	client.status = CONNECTED
+	client.Status = CONNECTED
 }
 
 func (client *Client) get(endpoint string) (json.RawMessage, error) {
@@ -227,7 +234,7 @@ func (client *Client) initHttp() {
 // 			fmt.Println("client no longer exists in map, moving on")
 // 			continue
 // 		}
-// 		if client.ipAddress == "" {
+// 		if client.IpAddress == "" {
 // 			lock.Unlock()
 // 			fmt.Println("Client has no IP yet, moving on")
 // 			continue
@@ -250,7 +257,7 @@ func (client *Client) initHttp() {
 // 			otherDeviceClient, OK := clients[deviceID]
 // 			if OK {
 // 				println("Updating the IP for this device")
-// 				otherDeviceClient.ipAddress = IP
+// 				otherDeviceClient.IpAddress = IP
 // 			}
 // 			lock.Unlock()
 // 			println("Unlocked, moving on to next returned device ID")

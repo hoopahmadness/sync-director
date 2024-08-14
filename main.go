@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -8,18 +9,15 @@ var devicesById = map[string]*Device{}
 var deviceConnections *DeviceWeb
 var netFoldersById = map[string]*NetworkFolder{}
 
-// var webManager = &WebManager{}
-
 func main() {
 	// start with map of device IDs to Devices
 	deviceConnections = newDeviceWeb()
 	myDevices := createMyDevices()
-	someClient := *myDevices[1].Client
-	fmt.Println(someClient)
 	for _, dev := range myDevices {
 		// populate my device map
-		devicesById[dev.deviceId] = dev
-
+		devicesById[dev.DeviceId] = dev
+	}
+	for _, dev := range myDevices {
 		// get connected devices and register each connection in the web
 		connectedDevs, err := dev.GetConnectedDevices()
 		if err != nil {
@@ -43,7 +41,9 @@ func main() {
 			netFolder.IngestFolder(folder)
 		}
 	}
-	fmt.Println(devicesById)
+	b, _ := json.Marshal(devicesById)
+	fmt.Println(string(b))
 	fmt.Println(deviceConnections)
-	fmt.Println(netFoldersById)
+	b, _ = json.Marshal(netFoldersById)
+	fmt.Println(string(b))
 }

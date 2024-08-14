@@ -1,20 +1,27 @@
 package main
 
+import "encoding/json"
+
 // This refers to the network-wide concept of a Folder that is shared on many devices.
 // The NetworkFolder tracks the specific Folder instances corresponding to various Devices
 // It also tracks the web of conections between devices that this folder is synced on.
 type NetworkFolder struct {
-	id        string
+	Id        string
 	folders   map[*Device]*Folder
-	deviceWeb *DeviceWeb
+	DeviceWeb *DeviceWeb
+}
+
+func (nf *NetworkFolder) String() string {
+	b, _ := json.Marshal(nf)
+	return string(b)
 }
 
 func newNetworkFolder(id string) *NetworkFolder {
 	nf := &NetworkFolder{
-		id:      id,
+		Id:      id,
 		folders: map[*Device]*Folder{},
 	}
-	nf.deviceWeb = newDeviceWeb()
+	nf.DeviceWeb = newDeviceWeb()
 	return nf
 }
 
@@ -25,7 +32,7 @@ func (nf *NetworkFolder) IngestFolder(folder *Folder) {
 	// get all the device pairs from this folder
 	for sharedDevID, data := range folder.SharedDevices {
 		sharedDev := devicesById[sharedDevID]
-		nf.deviceWeb.NewDevicePairForFolder(hostDev, sharedDev, data.Pending)
+		nf.DeviceWeb.NewDevicePairForFolder(hostDev, sharedDev, data.Pending)
 	}
 
 	// add folder to map
