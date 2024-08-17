@@ -196,7 +196,7 @@ func (client *Client) initHttp() {
 	if client.client == nil {
 		customTransport := http.DefaultTransport.(*http.Transport).Clone()
 		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		client.client = &http.Client{Transport: customTransport, Timeout: 10 * time.Second}
+		client.client = &http.Client{Transport: customTransport, Timeout: 3 * time.Second}
 	}
 }
 

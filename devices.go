@@ -3,11 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
 // A Device contains a client for communicating with a specific instance of Syncthing
 type Device struct {
 	*Client
+	GraphNode *opts.GraphNode
 }
 
 func NewDevice(nickname string) *Device {
@@ -109,6 +112,7 @@ func (dev *Device) GetConnectedDevices() ([]*Device, error) {
 					Status:   OUTOFNETWORK,
 					Nickname: id[0:10],
 				},
+				nil,
 			}
 			devicesById[id] = connectedDevice
 		}
@@ -127,6 +131,7 @@ type DevicePair struct {
 	Dev1         *Device
 	DevA         *Device
 	OfferPending *Device
+	GraphLink    *opts.GraphLink
 }
 
 func (dp *DevicePair) Other(given *Device) *Device {

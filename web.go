@@ -134,7 +134,7 @@ func (dw *DeviceWeb) getDevicePair(aDevice, anotherDevice *Device) (*DevicePair,
 
 	// create it
 	fmt.Println("Creating new device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
-	dp := &DevicePair{aDevice, anotherDevice, nil}
+	dp := &DevicePair{aDevice, anotherDevice, nil, nil}
 
 	dw.addPairing(dp)
 
