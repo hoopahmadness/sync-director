@@ -2,21 +2,23 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/go-echarts/go-echarts/v2/opts"
+	log "github.com/inconshreveable/log15"
 )
 
 // A Device contains a client for communicating with a specific instance of Syncthing
 type Device struct {
 	*Client
 	GraphNode *opts.GraphNode
+	log       log.Logger
 }
 
-func NewDevice(nickname string) *Device {
+func NewDevice(nickname string, log log.Logger) *Device {
 	d := &Device{}
 	c := newClient(d, nickname)
 	d.Client = c
+	d.log = log
 	return d
 }
 
@@ -27,7 +29,6 @@ func (dev *Device) String() string {
 
 // Queries the device client to get a complete list of all synced and pending folders
 func (dev *Device) GetFolders() ([]*Folder, error) {
-	fmt.Println("Getting folders")
 	syncedFolders, err := dev.Client.querySyncedFolders()
 	if err != nil {
 		return nil, err
@@ -90,12 +91,10 @@ func (dev *Device) GetFolders() ([]*Folder, error) {
 
 // Queries the device client to get all connected devices.
 // Also returns pending connections? not sure where I was going with this.
-func (dev *Device) GetConnectedDevices() ([]*Device, error) {
-	fmt.Println("Getting connected devices")
-	fmt.Println(*dev)
+func (dev *Device) GetConnectedDevices(m *model) ([]*Device, error) {
 	resp, err := dev.Client.queryConnectedDevices()
 	if err != nil {
-		fmt.Println(err.Error())
+		// fmt.Println(err.Error())
 		return nil, err
 	}
 	deviceList := []*Device{}
@@ -105,16 +104,11 @@ func (dev *Device) GetConnectedDevices() ([]*Device, error) {
 	for id := range resp.Connections {
 		var connectedDevice *Device
 		var exists bool
-		if connectedDevice, exists = devicesById[id]; !exists {
-			connectedDevice = &Device{
-				&Client{
-					DeviceId: id,
-					Status:   OUTOFNETWORK,
-					Nickname: id[0:10],
-				},
-				nil,
-			}
-			devicesById[id] = connectedDevice
+		if connectedDevice, exists = m.DevicesById[id]; !exists {
+			connectedDevice = NewDevice("unknown-"+id[0:7], m.log)
+			connectedDevice.DeviceId = id
+			connectedDevice.Status = OUTOFNETWORK
+			m.DevicesById[id] = connectedDevice
 		}
 		// dev.ConnectedDevices[connectedDevice] = struct{ Pending bool }{Pending: false}
 		// maybe I'm doing too much in this function and should just return the connected devices

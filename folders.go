@@ -1,6 +1,10 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	log "github.com/inconshreveable/log15"
+)
 
 // This refers to the network-wide concept of a Folder that is shared on many devices.
 // The NetworkFolder tracks the specific Folder instances corresponding to various Devices
@@ -16,22 +20,22 @@ func (nf *NetworkFolder) String() string {
 	return string(b)
 }
 
-func newNetworkFolder(id string) *NetworkFolder {
+func newNetworkFolder(id string, log log.Logger) *NetworkFolder {
 	nf := &NetworkFolder{
 		Id:      id,
 		folders: map[*Device]*Folder{},
 	}
-	nf.DeviceWeb = newDeviceWeb()
+	nf.DeviceWeb = newDeviceWeb(log)
 	return nf
 }
 
-func (nf *NetworkFolder) IngestFolder(folder *Folder) {
+func (nf *NetworkFolder) IngestFolder(folder *Folder, m *model) {
 	// get the device for this folder
-	hostDev := devicesById[folder.HostDevice]
+	hostDev := m.DevicesById[folder.HostDevice]
 
 	// get all the device pairs from this folder
 	for sharedDevID, data := range folder.SharedDevices {
-		sharedDev := devicesById[sharedDevID]
+		sharedDev := m.DevicesById[sharedDevID]
 		nf.DeviceWeb.NewDevicePairForFolder(hostDev, sharedDev, data.Pending)
 	}
 

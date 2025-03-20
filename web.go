@@ -2,13 +2,15 @@ package main
 
 import (
 	"fmt"
+
+	log "github.com/inconshreveable/log15"
 )
 
 // A device web represents a set of links between pairs of devices regarding a given folder
 type DeviceWeb struct {
 	AllPairs  map[*DevicePair]bool
 	PerDevice map[*Device][]*DevicePair
-	// manager   *WebManager
+	log       log.Logger
 }
 
 func (dw *DeviceWeb) String() string {
@@ -48,7 +50,7 @@ func (dw *DeviceWeb) getOtherDevices(aDevice *Device) []*Device {
 func (dw *DeviceWeb) NewDevicePairForFolder(hostDevice, syncedDevice *Device, pending bool) {
 	dp, err := dw.getDevicePair(hostDevice, syncedDevice)
 	if err != nil {
-		fmt.Println("A device can't share a folder with itself; skipping")
+		// fmt.Println("A device can't share a folder with itself; skipping")
 		return
 	}
 	if pending {
@@ -62,13 +64,13 @@ func (dw *DeviceWeb) NewDevicePairForFolder(hostDevice, syncedDevice *Device, pe
 func (dw *DeviceWeb) NewDeviceConnection(hostDevice, connectedDevice *Device) {
 	dp, err := dw.getDevicePair(hostDevice, connectedDevice)
 	if err != nil {
-		fmt.Println("Can't pair device to itself; skipping")
+		// fmt.Println("Can't pair device to itself; skipping")
 		return
 	}
 	if dp.OfferPending == nil {
 		dp.OfferPending = hostDevice
 	} else if dp.OfferPending == connectedDevice {
-		fmt.Println("Accepting pairing offer")
+		// fmt.Println("Accepting pairing offer")
 		dp.OfferPending = nil
 	}
 }
@@ -97,6 +99,7 @@ func (dw *DeviceWeb) addPairing(pair *DevicePair) {
 }
 
 func (dw *DeviceWeb) initializeDevicePairsListIfNeeded(devices ...*Device) {
+	dw.log.Debug("logging the contents of this DW!", "dw", dw.String())
 	for _, aDevice := range devices {
 		_, OK := dw.PerDevice[aDevice]
 		if !OK {
@@ -127,13 +130,13 @@ func (dw *DeviceWeb) getDevicePair(aDevice, anotherDevice *Device) (*DevicePair,
 	pairList := dw.PerDevice[aDevice]
 	for _, pair := range pairList {
 		if pair.Other(aDevice) == anotherDevice {
-			fmt.Println("Found existing device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
+			// fmt.Println("Found existing device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
 			return pair, nil
 		}
 	}
 
 	// create it
-	fmt.Println("Creating new device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
+	// fmt.Println("Creating new device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
 	dp := &DevicePair{aDevice, anotherDevice, nil, nil}
 
 	dw.addPairing(dp)
@@ -141,10 +144,11 @@ func (dw *DeviceWeb) getDevicePair(aDevice, anotherDevice *Device) (*DevicePair,
 	return dp, nil
 }
 
-func newDeviceWeb() *DeviceWeb {
+func newDeviceWeb(log log.Logger) *DeviceWeb {
 	newWeb := &DeviceWeb{}
 	newWeb.PerDevice = map[*Device][]*DevicePair{}
 	newWeb.AllPairs = map[*DevicePair]bool{}
+	newWeb.log = log
 	return newWeb
 }
 

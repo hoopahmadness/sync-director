@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -17,6 +16,13 @@ const (
 	OFFLINE      = "OFFLINE"
 	OUTOFNETWORK = "OUTOFNETWORK"
 )
+
+var orderedStatuses = map[ClientStatus]int{
+	CONNECTED:    10,
+	OUTOFNETWORK: 20,
+	OFFLINE:      30,
+	UNKNOWN:      40,
+}
 
 type ConnectedDevicesResponse struct {
 	Connections map[string]struct {
@@ -100,7 +106,6 @@ func (client *Client) queryPendingFolders() (GetPendingFoldersResponse, error) {
 	if client.Status == OUTOFNETWORK || client.Status == OFFLINE {
 		return GetPendingFoldersResponse{}, nil
 	}
-	fmt.Println("Getting folders")
 	message, err := client.get(client.generateURL("/rest/cluster/pending/folders"))
 	if err != nil {
 		return nil, err
@@ -143,8 +148,6 @@ func (client *Client) queryConnectedDevices() (*ConnectedDevicesResponse, error)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Here's the response for connected devices")
-	fmt.Println(string(message))
 	response := &ConnectedDevicesResponse{}
 	err = json.Unmarshal(message, &response)
 	return response, err
@@ -159,8 +162,8 @@ func (client *Client) ping() {
 		POST /rest/system/ping
 		Returns a {"ping": "pong"} object.
 	*/
-	fmt.Println("Pinging client")
-	fmt.Println(client.parentDevice.Nickname)
+	// fmt.Println("Pinging client")
+	// fmt.Println(client.parentDevice.Nickname)
 	if client.Status == OUTOFNETWORK {
 		return
 	}
@@ -199,75 +202,3 @@ func (client *Client) initHttp() {
 		client.client = &http.Client{Transport: customTransport, Timeout: 3 * time.Second}
 	}
 }
-
-// func findIPs(clients map[string]*Client, lock *sync.RWMutex) {
-// 	fmt.Println("Entering findIPs")
-// 	fmt.Println(clients)
-// 	if lock == nil {
-// 		lock = &sync.RWMutex{}
-// 	}
-// 	cameInWithOne := len(clients) == 1
-
-// 	lock.RLock()
-// 	if len(clients) == 0 {
-// 		lock.RUnlock()
-// 		fmt.Println("length of clients is 0, returning")
-// 		return
-// 	}
-// 	IDs := make([]string, len(clients))
-// 	ii := 0
-// 	for id, _ := range clients {
-// 		IDs[ii] = id
-// 		ii++
-// 	}
-// 	lock.RUnlock()
-// 	fmt.Println("got list of client IDs")
-// 	fmt.Println(IDs)
-
-// 	for _, id := range IDs {
-// 		lock.Lock()
-// 		fmt.Println("Locking map for client in loop:")
-// 		fmt.Println(id)
-// 		client, OK := clients[id]
-// 		if !OK {
-// 			lock.Unlock()
-// 			fmt.Println("client no longer exists in map, moving on")
-// 			continue
-// 		}
-// 		if client.IpAddress == "" {
-// 			lock.Unlock()
-// 			fmt.Println("Client has no IP yet, moving on")
-// 			continue
-// 		}
-// 		delete(clients, id)
-// 		lock.Unlock()
-// 		fmt.Println("Unlocked the map")
-// 		connectedIPs, err := client.getConnectedDeviceIPs()
-// 		fmt.Println("Connected devices with IPs:")
-// 		fmt.Println(connectedIPs)
-// 		if err != nil {
-// 			fmt.Println(err)
-// 			fmt.Println("Got an error getting connected devices; moving on")
-// 			continue
-// 		}
-// 		for deviceID, IP := range connectedIPs {
-// 			lock.Lock()
-// 			fmt.Println("Locking map for other device")
-// 			fmt.Println(deviceID)
-// 			otherDeviceClient, OK := clients[deviceID]
-// 			if OK {
-// 				println("Updating the IP for this device")
-// 				otherDeviceClient.IpAddress = IP
-// 			}
-// 			lock.Unlock()
-// 			println("Unlocked, moving on to next returned device ID")
-// 		}
-// 		println("Moving on to the next client ID")
-// 	}
-// 	if len(clients) == 1 && cameInWithOne {
-// 		fmt.Println("we haven't improved the list any, we should stop recursiving")
-// 		return
-// 	}
-// 	println("recursing")
-// 	findIPs(clients, lock)
-// }
