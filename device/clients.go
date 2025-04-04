@@ -1,4 +1,4 @@
-package main
+package device
 
 import (
 	"crypto/tls"
@@ -17,7 +17,7 @@ const (
 	OUTOFNETWORK = "OUTOFNETWORK"
 )
 
-var orderedStatuses = map[ClientStatus]int{
+var OrderedStatuses = map[ClientStatus]int{
 	CONNECTED:    10,
 	OUTOFNETWORK: 20,
 	OFFLINE:      30,

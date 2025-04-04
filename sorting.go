@@ -1,6 +1,12 @@
 package main
 
-type deviceByID []*Device
+import (
+	"github.com/hoopahmadness/sync-director/v2/device"
+	"github.com/hoopahmadness/sync-director/v2/folder"
+	"github.com/hoopahmadness/sync-director/v2/web"
+)
+
+type deviceByID []*device.Device
 
 func (dID deviceByID) Len() int {
 	return len(dID)
@@ -12,38 +18,38 @@ func (dID deviceByID) Swap(i, j int) {
 	dID[i], dID[j] = dID[j], dID[i]
 }
 
-type deviceByStatus []*Device
+type deviceByStatus []*device.Device
 
 func (dStat deviceByStatus) Len() int {
 	return len(dStat)
 }
 func (dStat deviceByStatus) Less(i, j int) bool {
-	return orderedStatuses[dStat[i].Status] < orderedStatuses[dStat[j].Status]
+	return device.OrderedStatuses[dStat[i].Status] < device.OrderedStatuses[dStat[j].Status]
 }
 func (dStat deviceByStatus) Swap(i, j int) {
 	dStat[i], dStat[j] = dStat[j], dStat[i]
 }
 
-type netFolderById []*NetworkFolder
+type netFolderById[T web.Pairable] []*folder.NetworkFolder[T]
 
-func (nfID netFolderById) Len() int {
+func (nfID netFolderById[T]) Len() int {
 	return len(nfID)
 }
-func (nfID netFolderById) Less(i, j int) bool {
+func (nfID netFolderById[T]) Less(i, j int) bool {
 	return nfID[i].Id < nfID[j].Id
 }
-func (nfID netFolderById) Swap(i, j int) {
+func (nfID netFolderById[T]) Swap(i, j int) {
 	nfID[i], nfID[j] = nfID[j], nfID[i]
 }
 
-type netFolderByDevices []*NetworkFolder
+type netFolderByDevices[T web.Pairable] []*folder.NetworkFolder[T]
 
-func (nfID netFolderByDevices) Len() int {
+func (nfID netFolderByDevices[T]) Len() int {
 	return len(nfID)
 }
-func (nfID netFolderByDevices) Less(i, j int) bool {
-	return len(nfID[i].folders) < len(nfID[j].folders)
+func (nfID netFolderByDevices[T]) Less(i, j int) bool {
+	return len(nfID[i].Folders) < len(nfID[j].Folders)
 }
-func (nfID netFolderByDevices) Swap(i, j int) {
+func (nfID netFolderByDevices[T]) Swap(i, j int) {
 	nfID[i], nfID[j] = nfID[j], nfID[i]
 }
