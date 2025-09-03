@@ -17,9 +17,3 @@ func (dp *Pair[Device]) Other(given *Device) *Device {
 	}
 	return nil
 }
-
-// If one of the devices has not accepted the folder then this returns the
-// device *offering* the folder for syncing. If both hosts are sharing then returns nil
-func (dp *Pair[Device]) GetPending() *Device {
-	return dp.OfferPending
-}

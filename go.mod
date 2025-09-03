@@ -6,7 +6,6 @@ toolchain go1.24.1
 
 require (
 	github.com/charmbracelet/bubbletea v1.1.1
-	github.com/go-echarts/go-echarts/v2 v2.4.1
 	github.com/inconshreveable/log15 v2.16.0+incompatible
 )
 

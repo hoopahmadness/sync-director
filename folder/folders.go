@@ -73,7 +73,7 @@ type Folder struct {
 func GetFolders(dev *device.Device, logger *log.Logger) ([]*Folder, error) {
 	syncedFolders, pendingFolders, err := dev.QueryFolders()
 	if err != nil {
-		log.Debug("Unable to query folders for this device", "err", err, "device", &dev)
+		log.Info("Unable to query folders for this device", "err", err, "device", &dev)
 		return nil, err
 	}
 

@@ -2,6 +2,8 @@ package device
 
 import (
 	"encoding/json"
+	"fmt"
+	"time"
 
 	log "github.com/inconshreveable/log15"
 )
@@ -10,6 +12,9 @@ import (
 type Device struct {
 	*Client
 	log log.Logger
+	// lastStatusCheck           time.Time
+	lastConnectedDevicesCheck time.Time
+	lastFolderCheck           time.Time
 }
 
 func NewDevice(nickname string, log log.Logger) *Device {
@@ -20,6 +25,28 @@ func NewDevice(nickname string, log log.Logger) *Device {
 	return d
 }
 
+// func (d Device) timeForNewStatusCheck() bool {
+// 	now := time.Now()
+// 	if d.Status == OFFLINE {
+// 		return now.After(d.lastStatusCheck.Add(10 * time.Second))
+// 	}
+// 	return now.After(d.lastStatusCheck.Add(10 * time.Minute))
+// }
+
+func (d Device) timeForNewConnectionsCheck() bool {
+	now := time.Now()
+	return now.After(d.lastConnectedDevicesCheck.Add(1 * time.Minute))
+}
+
+func (d Device) timeForNewFolderCheck() bool {
+	now := time.Now()
+	return now.After(d.lastFolderCheck.Add(1 * time.Minute))
+}
+
+func (dev *Device) AddNetworkInfo(deviceID, apiKey, ipAddress string) {
+	dev.addToNetwork(deviceID, apiKey, ipAddress)
+}
+
 func (dev *Device) String() string {
 	b, _ := json.Marshal(dev)
 	return string(b)
@@ -27,6 +54,10 @@ func (dev *Device) String() string {
 
 // Queries the device client to get a complete list of all synced and pending folders
 func (dev *Device) QueryFolders() (GetFolderResponse, GetPendingFoldersResponse, error) {
+	dev.Client.ping()
+	if !dev.timeForNewFolderCheck() {
+		return nil, nil, fmt.Errorf("not getting folders for this device again, it's too soon")
+	}
 	syncedFolders, err := dev.Client.querySyncedFolders()
 	if err != nil {
 		return nil, nil, err
@@ -40,12 +71,21 @@ func (dev *Device) QueryFolders() (GetFolderResponse, GetPendingFoldersResponse,
 
 // Queries the device client to get all connected devices.
 // Also returns pending connections? not sure where I was going with this.
-func (dev *Device) GetConnectedDevices(m deviceManager) ([]*Device, error) {
-	resp, err := dev.Client.queryConnectedDevices()
-	if err != nil {
-		// fmt.Println(err.Error())
-		return nil, err
+func (dev Device) GetConnectedDevices(m deviceManager) ([]*Device, error) {
+	var resp *ConnectedDevicesResponse
+	var err error
+	if dev.timeForNewConnectionsCheck() {
+		resp, err = dev.Client.queryConnectedDevices()
+		if err != nil {
+			dev.Status = OFFLINE
+			return nil, err
+		}
+	} else {
+		dev.log.Debug("Not going to get connected devices for this device because it's not been long enough",
+			"device", dev,
+		)
 	}
+	dev.lastConnectedDevicesCheck = time.Now()
 	deviceList := []*Device{}
 	if resp == nil {
 		return deviceList, nil
@@ -62,11 +102,7 @@ func (dev *Device) GetConnectedDevices(m deviceManager) ([]*Device, error) {
 				connectedDevice.Status = OUTOFNETWORK
 				connectedDevice.IpAddress = resp.Connections[id].Address
 			}
-			// m.DevicesById[id] = connectedDevice
-			m.SetDeviceById(connectedDevice)
 		}
-		// dev.ConnectedDevices[connectedDevice] = struct{ Pending bool }{Pending: false}
-		// maybe I'm doing too much in this function and should just return the connected devices
 		deviceList = append(deviceList, connectedDevice)
 	}
 	return deviceList, nil
@@ -77,31 +113,10 @@ func (dev *Device) GetId() string {
 	return dev.DeviceId
 }
 
-func (dev *Device) GetFriendlyName() string {
+func (dev Device) GetFriendlyName() string {
 	return dev.Nickname
 }
 
-// // Device pairs are bidirectional objects that show a relationship between two devices
-// // If one of the devices has offerred to share a folder or connection but a second device has not accepted it,
-// // the *offering* device will be put in the pending slot.
-// type DevicePair struct {
-// 	Dev1         *Device
-// 	DevA         *Device
-// 	OfferPending *Device
-// 	GraphLink    *opts.GraphLink
-// }
-
-// func (dp *DevicePair) Other(given *Device) *Device {
-// 	if dp.Dev1 == given {
-// 		return dp.DevA
-// 	} else if dp.DevA == given {
-// 		return dp.Dev1
-// 	}
-// 	return nil
-// }
-
-// // If one of the devices has not accepted the folder then this returns the
-// // device *offering* the folder for syncing. If both hosts are sharing then returns nil
-// func (dp *DevicePair) GetPending() *Device {
-// 	return dp.OfferPending
-// }
+func (dev Device) GetOrderedStatus() int {
+	return orderedStatuses[dev.Status]
+}

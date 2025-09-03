@@ -6,6 +6,7 @@ Potentially rip out echarts but maybe keep as an auxillary view outside of tui
 Add folders, add devices
 Decide on how we're going to insantiate device list Json file? yaml?
 Server mode?
+track the display names of folders and devices from the perspective of other devices. Maybe IP address too as backups for the configurued ip
 */
 package main
 
@@ -14,15 +15,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hoopahmadness/sync-director/v2/director"
 	log "github.com/inconshreveable/log15"
-	// "github.com/go-echarts/go-echarts/v2/charts"
-	// "github.com/go-echarts/go-echarts/v2/components"
-	// "github.com/go-echarts/go-echarts/v2/opts"
 )
-
-// var devicesById = map[string]*Device{}
-// var deviceConnections *DeviceWeb
-// var netFoldersById = map[string]*NetworkFolder{}
 
 func main() {
 	// deviceConnections = newDeviceWeb()
@@ -32,8 +27,9 @@ func main() {
 		panic("Unable to create logging file")
 	}
 	logger.SetHandler(log.StreamHandler(newFile, log.LogfmtFormat()))
-	model := initialState(logger)
-	if _, err := tea.NewProgram(&model).Run(); err != nil {
+	model := director.InitialState(logger, createMyDevices)
+	prog := tea.NewProgram(&model)
+	if _, err := prog.Run(); err != nil {
 		fmt.Printf("Uh oh, there was an error: %v\n", err)
 		os.Exit(1)
 	}

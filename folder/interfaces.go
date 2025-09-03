@@ -7,6 +7,6 @@ type folderManager[Pairable web.Pairable] interface {
 	GetDeviceById(id string) (*Pairable, bool)
 }
 
-type device interface {
-	QueryFolders() ()
-}
+// type device interface {
+// 	QueryFolders() ()
+// }

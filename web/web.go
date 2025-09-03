@@ -6,11 +6,12 @@ import (
 	log "github.com/inconshreveable/log15"
 )
 
-// A device web represents a set of links between pairs of devices regarding a given folder
+// A device web represents a set of links between pairs of devices in the context of
+// a specific folder or all folders
 type Web[Device Pairable] struct {
 	AllPairs  map[*Pair[Device]]bool
 	PerDevice map[*Device][]*Pair[Device]
-	log       log.Logger
+	log       log.Logger // todo remove this and start passing children loggers around instead
 }
 
 func (dw *Web[Device]) String() string {
@@ -26,7 +27,7 @@ func (dw *Web[Device]) String() string {
 		}
 		x := *(pairing.Dev1)
 		y := *(pairing.DevA)
-		pairStr := fmt.Sprintf("%s%s paired with %s%s\n", x.FriendlyName(), firstOffering, y.FriendlyName(), secondOffering)
+		pairStr := fmt.Sprintf("%s%s paired with %s%s\n", x.GetFriendlyName(), firstOffering, y.GetFriendlyName(), secondOffering)
 		webStr += pairStr
 	}
 	return webStr
@@ -52,7 +53,6 @@ func (dw *Web[Device]) getOtherDevices(aDevice *Device) []*Device {
 func (dw *Web[Device]) NewDevicePairForFolder(hostDevice, syncedDevice *Device, pending bool) {
 	dp, err := dw.getDevicePair(hostDevice, syncedDevice)
 	if err != nil {
-		// fmt.Println("A device can't share a folder with itself; skipping")
 		return
 	}
 	if pending {
@@ -60,18 +60,18 @@ func (dw *Web[Device]) NewDevicePairForFolder(hostDevice, syncedDevice *Device, 
 	}
 }
 
-// Create a new connection between devices. All device pairs created this way are pending by defualt.
+// Create a new connection between devices. All device pairs created this way are pending by default.
 // When the inverse pair is created (in other words, when the synced device tries to add a connection
 // to this device) then the connection will no longer be pending
 func (dw *Web[Device]) NewDeviceConnection(hostDevice, connectedDevice *Device) {
 	dp, err := dw.getDevicePair(hostDevice, connectedDevice)
 	if err != nil {
-		// fmt.Println("Can't pair device to itself; skipping")
 		return
 	}
-	if dp.OfferPending == nil {
+	switch dp.OfferPending {
+	case nil:
 		dp.OfferPending = hostDevice
-	} else if dp.OfferPending == connectedDevice {
+	case connectedDevice:
 		// fmt.Println("Accepting pairing offer")
 		dp.OfferPending = nil
 	}
@@ -81,7 +81,7 @@ func (dw *Web[Device]) NewDeviceConnection(hostDevice, connectedDevice *Device) 
 // Each DevicePair is kept in a map as well as kept in a list for each related device
 // (that's three pointers per pair)
 // Adding an existing pair again is a no-op
-// For now let's assume this is only run internall by the web manager
+// For now let's assume this is only run internally by the web object
 func (dw *Web[Device]) addPairing(pair *Pair[Device]) {
 	if _, OK := dw.AllPairs[pair]; OK {
 		return
@@ -101,7 +101,6 @@ func (dw *Web[Device]) addPairing(pair *Pair[Device]) {
 }
 
 func (dw *Web[Device]) initializeDevicePairsListIfNeeded(devices ...*Device) {
-	dw.log.Debug("logging the contents of this DW!", "dw", dw.String())
 	for _, aDevice := range devices {
 		_, OK := dw.PerDevice[aDevice]
 		if !OK {
@@ -124,13 +123,11 @@ func (dw *Web[Device]) getDevicePair(aDevice, anotherDevice *Device) (*Pair[Devi
 	pairList := dw.PerDevice[aDevice]
 	for _, pair := range pairList {
 		if pair.Other(aDevice) == anotherDevice {
-			// fmt.Println("Found existing device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
 			return pair, nil
 		}
 	}
 
 	// create it
-	// fmt.Println("Creating new device pairing: " + aDevice.Nickname + " & " + anotherDevice.Nickname)
 	dp := &Pair[Device]{
 		Dev1:         aDevice,
 		DevA:         anotherDevice,
@@ -149,19 +146,3 @@ func NewDeviceWeb[Device Pairable](log log.Logger) *Web[Device] {
 	newWeb.log = log
 	return newWeb
 }
-
-// func (wb *WebManager) ProcessNewFolder(folder *Folder) {
-// 	newWeb := wb.NewDeviceWeb()
-// 	if folder != nil {
-// 		wb.folderWebs[folder] = newWeb
-// 	}
-// 	// don't we need to do more here? I think there should be some actual processing but I'm not sure off the top of my head what it is
-// }
-
-// func newWebManager() *WebManager {
-// 	newMan := &WebManager{
-// 		folderWebs: map[*Folder]*DeviceWeb{},
-// 	}
-// 	newMan.master = newMan.NewDeviceWeb()
-// 	return newMan
-// }

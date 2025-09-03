@@ -17,7 +17,7 @@ const (
 	OUTOFNETWORK = "OUTOFNETWORK"
 )
 
-var OrderedStatuses = map[ClientStatus]int{
+var orderedStatuses = map[ClientStatus]int{
 	CONNECTED:    10,
 	OUTOFNETWORK: 20,
 	OFFLINE:      30,
@@ -141,11 +141,13 @@ func (client *Client) addDevice(name, id string) {
 
 func (client *Client) queryConnectedDevices() (*ConnectedDevicesResponse, error) {
 	//  rest/system/connections
+	client.ping()
 	if client.Status == OUTOFNETWORK || client.Status == OFFLINE {
 		return nil, nil
 	}
 	message, err := client.get(client.generateURL("/rest/system/connections"))
 	if err != nil {
+		client.parentDevice.log.Debug("Found an error; offline?", "err", err)
 		return nil, err
 	}
 	response := &ConnectedDevicesResponse{}
