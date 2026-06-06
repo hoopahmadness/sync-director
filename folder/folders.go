@@ -11,42 +11,42 @@ import (
 // This refers to the network-wide concept of a Folder that is shared on many devices.
 // The NetworkFolder tracks the specific Folder instances corresponding to various Devices
 // It also tracks the web of conections between devices that this folder is synced on.
-type NetworkFolder[Device web.Pairable] struct {
+type NetworkFolder[D any, DPtr web.Pairable[D]] struct {
 	Id        string
-	Folders   map[*Device]*Folder
-	DeviceWeb *web.Web[Device]
+	Folders   map[DPtr]*Folder
+	DeviceWeb *web.Web[D, DPtr]
 }
 
-func (nf *NetworkFolder[Device]) String() string {
+func (nf *NetworkFolder[D, Device]) String() string {
 	b, _ := json.Marshal(nf)
 	return string(b)
 }
 
-func (nf *NetworkFolder[Device]) GetFriendlyName() string {
+func (nf *NetworkFolder[D, Device]) Name() string {
 	return nf.Id
 }
 
-func (nf *NetworkFolder[Device]) GetId() string {
+func (nf *NetworkFolder[D, Device]) GetId() string {
 	return nf.Id
 }
 
-func NewNetworkFolder[Device web.Pairable](id string, log log.Logger) *NetworkFolder[Device] {
-	nf := &NetworkFolder[Device]{
+func NewNetworkFolder[D any, DPtr web.Pairable[D]](id string, log log.Logger) *NetworkFolder[D, DPtr] {
+	nf := &NetworkFolder[D, DPtr]{
 		Id:      id,
-		Folders: map[*Device]*Folder{},
+		Folders: map[DPtr]*Folder{},
 	}
-	nf.DeviceWeb = web.NewDeviceWeb[Device](log)
+	nf.DeviceWeb = web.NewDeviceWeb[D, DPtr](log)
 	return nf
 }
 
-func (nf *NetworkFolder[Device]) IngestFolder(folder *Folder, m folderManager[Device]) {
+func (nf *NetworkFolder[D, Device]) IngestFolder(folder *Folder, m folderManager[D, Device]) {
 	// get the device for this folder
 	hostDev, _ := m.GetDeviceById(folder.HostDevice)
 
 	// get all the device pairs from this folder
 	for sharedDevID, data := range folder.SharedDevices {
 		sharedDev, _ := m.GetDeviceById(sharedDevID)
-		nf.DeviceWeb.NewDevicePairForFolder(hostDev, sharedDev, data.Pending)
+		nf.DeviceWeb.NewDevicePairForFolder(hostDev, sharedDev, data.Pending, nil)
 	}
 
 	// add folder to map

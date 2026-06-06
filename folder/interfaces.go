@@ -2,11 +2,7 @@ package folder
 
 import "github.com/hoopahmadness/sync-director/v2/web"
 
-type folderManager[Pairable web.Pairable] interface {
-	GetFolderById(id string) (*NetworkFolder[Pairable], bool)
-	GetDeviceById(id string) (*Pairable, bool)
+type folderManager[P any, PPtr web.Pairable[P]] interface {
+	GetFolderById(id string) (*NetworkFolder[P, PPtr], bool)
+	GetDeviceById(id string) (PPtr, bool)
 }
-
-// type device interface {
-// 	QueryFolders() ()
-// }

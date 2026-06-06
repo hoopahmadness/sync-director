@@ -30,6 +30,13 @@ type ConnectedDevicesResponse struct {
 	}
 }
 
+type ConfiguredDevicesResponse []ConfiguredDevicesResponseElement
+
+type ConfiguredDevicesResponseElement struct {
+	DeviceID string
+	Name     string
+}
+
 // top level is map of folder IDs to OfferedByObject
 // OfferedBy is a map of the other device ID to some extraneous details
 // Label is ???
@@ -62,9 +69,9 @@ type Client struct {
 	Status       ClientStatus
 }
 
-func newClient(device *Device, nickname string) *Client {
+func newClient(device *Device) *Client {
 	c := &Client{
-		Nickname:     nickname,
+		Nickname:     "",
 		Status:       OUTOFNETWORK,
 		parentDevice: device,
 	}
@@ -74,6 +81,12 @@ func newClient(device *Device, nickname string) *Client {
 func (c *Client) String() string {
 	b, _ := json.Marshal(c)
 	return string(b)
+}
+
+func (c *Client) AddNickname(name string) {
+	if c.Nickname == "" {
+		c.Nickname = name
+	}
 }
 
 func (client *Client) addToNetwork(deviceID, apikey, ipAddress string) {
@@ -149,8 +162,28 @@ func (client *Client) queryConnectedDevices() (*ConnectedDevicesResponse, error)
 	if err != nil {
 		client.parentDevice.log.Debug("Found an error; offline?", "err", err)
 		return nil, err
+	} else {
+		client.parentDevice.log.Debug("Got a connected devices response", "res", string(message))
 	}
 	response := &ConnectedDevicesResponse{}
+	err = json.Unmarshal(message, &response)
+	return response, err
+}
+
+func (client *Client) queryConfiguredDevices() (ConfiguredDevicesResponse, error) {
+	//  rest/system/connections
+	client.ping()
+	if client.Status == OUTOFNETWORK || client.Status == OFFLINE {
+		return nil, nil
+	}
+	message, err := client.get(client.generateURL("/rest/config/devices"))
+	if err != nil {
+		client.parentDevice.log.Debug("Found an error; offline?", "err", err)
+		return nil, err
+	} else {
+		client.parentDevice.log.Debug("Got a configured devices response", "res", string(message))
+	}
+	response := ConfiguredDevicesResponse{}
 	err = json.Unmarshal(message, &response)
 	return response, err
 }

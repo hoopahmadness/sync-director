@@ -15,11 +15,14 @@ type Device struct {
 	// lastStatusCheck           time.Time
 	lastConnectedDevicesCheck time.Time
 	lastFolderCheck           time.Time
+	Collapsed                 bool
+	Hidden                    bool
+	SelectedFolder            *bool
 }
 
-func NewDevice(nickname string, log log.Logger) *Device {
+func NewDevice(log log.Logger) *Device {
 	d := &Device{}
-	c := newClient(d, nickname)
+	c := newClient(d)
 	d.Client = c
 	d.log = log
 	return d
@@ -52,6 +55,10 @@ func (dev *Device) String() string {
 	return string(b)
 }
 
+func (dev *Device) Offline() bool {
+	return dev.Client.Status == OFFLINE
+}
+
 // Queries the device client to get a complete list of all synced and pending folders
 func (dev *Device) QueryFolders() (GetFolderResponse, GetPendingFoldersResponse, error) {
 	dev.Client.ping()
@@ -70,15 +77,21 @@ func (dev *Device) QueryFolders() (GetFolderResponse, GetPendingFoldersResponse,
 }
 
 // Queries the device client to get all connected devices.
-// Also returns pending connections? not sure where I was going with this.
 func (dev Device) GetConnectedDevices(m deviceManager) ([]*Device, error) {
-	var resp *ConnectedDevicesResponse
-	var err error
+	var connectedResp *ConnectedDevicesResponse
+	var connectedErr error
+	var configuredResp ConfiguredDevicesResponse
+	var configuredErr error
 	if dev.timeForNewConnectionsCheck() {
-		resp, err = dev.Client.queryConnectedDevices()
-		if err != nil {
+		connectedResp, connectedErr = dev.Client.queryConnectedDevices()
+		if connectedErr != nil {
 			dev.Status = OFFLINE
-			return nil, err
+			return nil, connectedErr
+		}
+		configuredResp, configuredErr = dev.Client.queryConfiguredDevices()
+		if configuredErr != nil {
+			dev.Status = OFFLINE
+			return nil, configuredErr
 		}
 	} else {
 		dev.log.Debug("Not going to get connected devices for this device because it's not been long enough",
@@ -87,33 +100,38 @@ func (dev Device) GetConnectedDevices(m deviceManager) ([]*Device, error) {
 	}
 	dev.lastConnectedDevicesCheck = time.Now()
 	deviceList := []*Device{}
-	if resp == nil {
+	if connectedResp == nil {
 		return deviceList, nil
 	}
-	for id := range resp.Connections {
+	for _, confDev := range configuredResp {
+		id := confDev.DeviceID
+		devName := confDev.Name
 		var connectedDevice *Device
 		var exists bool
 		if connectedDevice, exists = m.GetDeviceById(id); !exists {
-			connectedDevice = NewDevice("unknown-"+id[0:7], dev.log)
+			connectedDevice = NewDevice(dev.log)
 			connectedDevice.DeviceId = id
-			if resp.Connections[id].Address == "" {
+			if connectedResp.Connections[id].Address == "" {
 				connectedDevice.Status = OFFLINE
 			} else {
 				connectedDevice.Status = OUTOFNETWORK
-				connectedDevice.IpAddress = resp.Connections[id].Address
+				connectedDevice.IpAddress = connectedResp.Connections[id].Address
 			}
 		}
+		connectedDevice.AddNickname(devName)
 		deviceList = append(deviceList, connectedDevice)
 	}
 	return deviceList, nil
-
 }
 
 func (dev *Device) GetId() string {
 	return dev.DeviceId
 }
 
-func (dev Device) GetFriendlyName() string {
+func (dev Device) Name() string {
+	if dev.Nickname == "" {
+		return "unknown-" + dev.DeviceId[0:7]
+	}
 	return dev.Nickname
 }
 

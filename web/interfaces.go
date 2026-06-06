@@ -1,5 +1,7 @@
 package web
 
-type Pairable interface {
-	GetFriendlyName() string
+type Pairable[P any] interface {
+	*P
+	Name() string
+	Offline() bool
 }

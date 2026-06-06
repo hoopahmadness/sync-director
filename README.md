@@ -24,6 +24,7 @@ Also, come to think of it, the view for a Device in context of a single Folder s
 Device List View (network)
 - m.DeviceList, m.FolderList
 - Lists all devices with nickname, status, # connections, # folders. Arrow keys to highlight and scroll, ENTER to select for Device Network View. Perhaps a grid?
+- BIOFABRIC: switch to fabric of all devices
 - Panel that shows verbose details for selected device
 - Allow sorting ASC/DEC by name, status, number of connections, num folders
 - Allow filtering by status, hidden, pending actions
@@ -32,6 +33,7 @@ Device List View (network)
 Folder List View (network)
 - m.DeviceList, m.FolderList
 - Lists all folders with nickname, # device pairs. Arrow keys, highlight scroll, ENTER key, Folder View
+- No biofabric view
 - Panel with verbose details for selected folder
 - Sorting by name, num devices, num device pairs
 - Filtering of hidden folders
@@ -40,6 +42,7 @@ Folder List View (network)
 Single folder, many devices view
 - m.FolderList[1]
 - Lists all devices syncing this folder with nickname, status, # connections. Arrow keys to highlight and scroll, ENTER to select for Device View. Perhaps a grid?
+- BIOFABRIC: switch to fabric of all devices that have this folder
 - Change folder nickname for all devices
 - Toggle folder as hidden (in the app)
 - Panel that shows verbose details for selected device, including path
@@ -49,6 +52,7 @@ Single folder, many devices view
 
 Single Device, many folders View
 - m.DeviceList[1], m.GetFoldersByDevice(dev)
+- No biofabric view
 - Essentially a recreation of the syncthing web gui
     - Lists various stats and info about device
     - Lists connected devices and folders.

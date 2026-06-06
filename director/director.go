@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hoopahmadness/sync-director/v2/biofabric"
 	"github.com/hoopahmadness/sync-director/v2/device"
 	"github.com/hoopahmadness/sync-director/v2/folder"
 	"github.com/hoopahmadness/sync-director/v2/web"
@@ -15,26 +16,30 @@ import (
 
 type Director struct {
 	DevicesById       map[string]*device.Device
-	DeviceConnections *web.Web[device.Device]
-	NetFoldersById    map[string]*folder.NetworkFolder[device.Device]
+	DeviceConnections *web.Web[device.Device, *device.Device]
+	NetFoldersById    map[string]*folder.NetworkFolder[device.Device, *device.Device]
 	RWLock            sync.RWMutex
 
 	// Device List is just a convenient representation of the DevicesByID which can be sorted,
 	// iterated over. It starts with nil, which represents "all devices" or network view. Together
 	// with the Device Index it represents part of the current state of the app.
-	DeviceList  []*device.Device
-	DeviceIndex int
+	DeviceList     []*device.Device
+	DeviceIndex    int
+	SelectedDevice *device.Device
 
 	// Folder List is just a convenient representation of the NetFoldersById which can be sorted,
 	// iterated over. It starts with nil, which represents "all folders" or network view. Together
 	// with the Folder Index it represents part of the current state of the app.
-	FolderList  []*folder.NetworkFolder[device.Device]
-	FolderIndex int
+	FolderList     []*folder.NetworkFolder[device.Device, *device.Device]
+	FolderIndex    int
+	SelectedFolder *folder.NetworkFolder[device.Device, *device.Device]
 
 	// DeviceOrFolder is just a boolean that helps define part of the state of the app
 	// in this case it defines whether we are showing the Network mode
 	// for the Device List or the Folder List
 	DeviceOverFolder bool
+
+	fabric biofabric.Fabric[device.Device, *device.Device]
 
 	log log.Logger
 
@@ -43,11 +48,17 @@ type Director struct {
 
 // Helper func that goes through all our devices and attempts to query them for connected devices.
 // We create a list of tea commands where each one queries one of our known devices
-func (sd *Director) refreshConnectedDevices(incomingMsg MsgHistory) tea.Msg {
+func (sd *Director) refreshConnectedDevices(deviceIDs []string, incomingMsg MsgHistory) tea.Msg {
 	sd.log.Debug("Starting refreshConnectedDevices")
 	getConnectedDevicesCommands := tea.BatchMsg{}
 	sd.RWLock.RLock()
-	for _, dev := range sd.DevicesById {
+	for _, devID := range deviceIDs {
+		dev := sd.DevicesById[devID]
+		if dev == nil {
+			continue
+		}
+		// }
+		// for _, dev := range sd.DevicesById {
 		// get connected devices and register each connection in the web
 		getConnectedDevicesCommands = append(getConnectedDevicesCommands,
 			func() tea.Msg {
@@ -56,7 +67,7 @@ func (sd *Director) refreshConnectedDevices(incomingMsg MsgHistory) tea.Msg {
 				newConnections := map[*device.Device][]*device.Device{}
 				connectedDevs, err := scopedDev.GetConnectedDevices(sd)
 				if err != nil {
-					sd.log.Crit("Get ConnectedDevices crashed; probably offline?")
+					sd.log.Crit("Get ConnectedDevices crashed; probably offline?", "err", err)
 					return nil
 				}
 				newConnections[scopedDev] = connectedDevs
@@ -85,26 +96,32 @@ func (sd *Director) populateDeviceList() {
 }
 
 func (sd *Director) populateFolderList() {
-	foldList := []*folder.NetworkFolder[device.Device]{nil}
+	foldList := []*folder.NetworkFolder[device.Device, *device.Device]{nil}
 	sd.RWLock.RLock()
 	for _, netFolder := range sd.NetFoldersById {
 		foldList = append(foldList, netFolder)
 	}
 	sd.RWLock.RUnlock()
-	sort.Stable(NetFoldersByID[device.Device](foldList))
+	sort.Stable(NetFoldersByID[device.Device, *device.Device](foldList))
 	sd.FolderList = foldList
 }
 
-func (sd *Director) refreshDeviceFolders(incomingMsg MsgHistory) tea.Msg {
+func (sd *Director) refreshDeviceFolders(deviceIDs []string, incomingMsg MsgHistory) tea.Msg {
 	// go back through each device and get the folders
 	getFoldersCmds := tea.BatchMsg{}
 	sd.RWLock.RLock()
-	for _, dev := range sd.DevicesById {
-		scopedDev := dev
+	for _, devID := range deviceIDs {
+		scopedDev := sd.DevicesById[devID]
+		if scopedDev == nil {
+			continue
+		}
+		// }
+		// for _, dev := range sd.DevicesById {
+		// 	scopedDev := dev
 
 		getFoldersCmds = append(getFoldersCmds,
 			func() tea.Msg {
-				foldersToIngest := map[*folder.Folder]*folder.NetworkFolder[device.Device]{}
+				foldersToIngest := map[*folder.Folder]*folder.NetworkFolder[device.Device, *device.Device]{}
 				context := fmt.Sprintf("Getting folders for %s", scopedDev.DeviceId)
 				folders, err := folder.GetFolders(scopedDev, &sd.log)
 				if err != nil {
@@ -121,6 +138,9 @@ func (sd *Director) refreshDeviceFolders(incomingMsg MsgHistory) tea.Msg {
 					}
 					foldersToIngest[thisFolder] = netFolder
 				}
+				if len(foldersToIngest) == 0 {
+					return nil
+				}
 				outgoingMsg := MsgHistory{}
 				outgoingMsg.AddHistory(incomingMsg, context)
 				outgoing := NewNetFoldersMsg{
@@ -136,10 +156,14 @@ func (sd *Director) refreshDeviceFolders(incomingMsg MsgHistory) tea.Msg {
 }
 
 func InitialState(logger log.Logger, createDevicesFunc func(log.Logger) []tea.Msg) Director {
+	devWeb := web.NewDeviceWeb[device.Device](logger)
+
+	fabric := biofabric.NewFabric(devWeb, logger)
 	return Director{
 		DevicesById:         map[string]*device.Device{},
-		DeviceConnections:   web.NewDeviceWeb[device.Device](logger),
-		NetFoldersById:      map[string]*folder.NetworkFolder[device.Device]{},
+		DeviceConnections:   devWeb,
+		NetFoldersById:      map[string]*folder.NetworkFolder[device.Device, *device.Device]{},
+		fabric:              fabric,
 		log:                 logger,
 		readDevicesFromFile: createDevicesFunc,
 	}
@@ -149,12 +173,12 @@ func (sd *Director) Init() tea.Cmd {
 	devices := sd.readDevicesFromFile(sd.log)
 	returnMsgs := []tea.Cmd{}
 	for _, devInfo := range devices {
-		thisDevInfo := devInfo.(NewNetworkDeviceMsg)
-		context := fmt.Sprintf("new device info added from Init: %s", thisDevInfo.DeviceID)
+		devInfoMsg := devInfo.(NewNetworkDeviceMsg)
+		context := fmt.Sprintf("new device info added from Init: %s", devInfoMsg.DeviceID)
 
 		cmd := func() tea.Msg {
-			thisDevInfo.MsgHistory.History = []string{context}
-			return thisDevInfo
+			devInfoMsg.MsgHistory.History = []string{context}
+			return devInfoMsg
 		}
 		returnMsgs = append(returnMsgs, cmd)
 	}
@@ -163,8 +187,9 @@ func (sd *Director) Init() tea.Cmd {
 
 func (sd *Director) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	sd.log.Debug("New Message", "msg", msg)
-	var outputCmd func(msg MsgHistory) tea.Msg
+	var outputCmd func(IDs []string, msg MsgHistory) tea.Msg
 	var outputMsg MsgHistory
+	outputIDs := []string{}
 
 	switch msg := msg.(type) {
 
@@ -175,7 +200,8 @@ func (sd *Director) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var exists bool
 		sd.RWLock.Lock()
 		if dev, exists = sd.DevicesById[msg.DeviceID]; !exists {
-			dev = device.NewDevice(msg.Nickname, sd.log)
+			dev = device.NewDevice(sd.log)
+			dev.AddNickname(msg.Nickname)
 			sd.DevicesById[msg.DeviceID] = dev
 		}
 
@@ -185,11 +211,13 @@ func (sd *Director) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sd.populateDeviceList()
 		outputMsg.AddHistory(msg.MsgHistory, "refreshing connected devices after new devices found")
 		outputCmd = sd.refreshConnectedDevices
+		outputIDs = []string{dev.DeviceId}
 
 	case NewDevicesConnectionMsg:
 		// New connections have been found
 		newDeviceConnections := msg.DeviceConnections
 		for devA, connectedDevices := range newDeviceConnections {
+			outputIDs = append(outputIDs, devA.DeviceId)
 			sd.log.Debug("waiting to lock")
 			sd.RWLock.Lock()
 			sd.log.Debug("got lock, waiting for loop to end")
@@ -245,6 +273,9 @@ func (sd *Director) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "r":
 				outputMsg.History = []string{"refreshing devices from user input"}
 				outputCmd = sd.refreshConnectedDevices
+				for id := range sd.DevicesById {
+					outputIDs = append(outputIDs, id)
+				}
 			}
 		}
 
@@ -253,7 +284,7 @@ func (sd *Director) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if outputCmd == nil {
 			return nil
 		}
-		return outputCmd(outputMsg)
+		return outputCmd(outputIDs, outputMsg)
 	}
 	return sd, outputWrapper
 }
@@ -285,6 +316,12 @@ func (sd *Director) View() string {
 			output += folder.Id + "\n"
 		}
 	}
+	// output += sd.fabric.View()
+	// if defaultFolder, OK := sd.NetFoldersById["default"]; OK {
+	// 	defaultFolderFabric := biofabric.NewFabric(defaultFolder.DeviceWeb, sd.log)
+	// 	output += defaultFolderFabric.View()
+	// }
+
 	return output
 }
 
@@ -315,14 +352,14 @@ func (sd *Director) SetDeviceById(dev *device.Device) {
 	sd.RWLock.Unlock()
 }
 
-func (sd *Director) GetFolderById(id string) (*folder.NetworkFolder[device.Device], bool) {
+func (sd *Director) GetFolderById(id string) (*folder.NetworkFolder[device.Device, *device.Device], bool) {
 	sd.RWLock.RLock()
 	netFold, OK := sd.NetFoldersById[id]
 	sd.RWLock.RUnlock()
 	return netFold, OK
 }
 
-func (sd *Director) setFolderById(netFolder *folder.NetworkFolder[device.Device]) {
+func (sd *Director) setFolderById(netFolder *folder.NetworkFolder[device.Device, *device.Device]) {
 	sd.RWLock.Lock()
 	sd.NetFoldersById[netFolder.Id] = netFolder
 

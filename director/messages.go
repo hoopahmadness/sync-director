@@ -32,6 +32,6 @@ type NewDevicesConnectionMsg struct {
 // Message representing new or updated Network Folders
 // We return a map of a new folder to the network folder that will ingest it
 type NewNetFoldersMsg struct {
-	foldersToIngest map[*folder.Folder]*folder.NetworkFolder[device.Device]
+	foldersToIngest map[*folder.Folder]*folder.NetworkFolder[device.Device, *device.Device]
 	MsgHistory
 }

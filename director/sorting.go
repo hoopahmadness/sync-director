@@ -40,12 +40,12 @@ func (dStat deviceByStatus) Swap(i, j int) {
 	dStat[i], dStat[j] = dStat[j], dStat[i]
 }
 
-type NetFoldersByID[T web.Pairable] []*folder.NetworkFolder[T]
+type NetFoldersByID[T any, TPtr web.Pairable[T]] []*folder.NetworkFolder[T, TPtr]
 
-func (nfID NetFoldersByID[T]) Len() int {
+func (nfID NetFoldersByID[T, TPtr]) Len() int {
 	return len(nfID)
 }
-func (nfID NetFoldersByID[T]) Less(i, j int) bool {
+func (nfID NetFoldersByID[T, TPtr]) Less(i, j int) bool {
 	if nfID[i] == nil {
 		return true
 	} else if nfID[j] == nil {
@@ -53,16 +53,16 @@ func (nfID NetFoldersByID[T]) Less(i, j int) bool {
 	}
 	return nfID[i].GetId() < nfID[j].GetId()
 }
-func (nfID NetFoldersByID[T]) Swap(i, j int) {
+func (nfID NetFoldersByID[T, TPtr]) Swap(i, j int) {
 	nfID[i], nfID[j] = nfID[j], nfID[i]
 }
 
-type netFolderByPairables[T web.Pairable] []*folder.NetworkFolder[T]
+type netFolderByPairables[T any, TPtr web.Pairable[T]] []*folder.NetworkFolder[T, TPtr]
 
-func (nfID netFolderByPairables[T]) Len() int {
+func (nfID netFolderByPairables[T, TPtr]) Len() int {
 	return len(nfID)
 }
-func (nfID netFolderByPairables[T]) Less(i, j int) bool {
+func (nfID netFolderByPairables[T, TPtr]) Less(i, j int) bool {
 	if nfID[i] == nil {
 		return true
 	} else if nfID[j] == nil {
@@ -70,6 +70,6 @@ func (nfID netFolderByPairables[T]) Less(i, j int) bool {
 	}
 	return len(nfID[i].Folders) < len(nfID[j].Folders)
 }
-func (nfID netFolderByPairables[T]) Swap(i, j int) {
+func (nfID netFolderByPairables[T, TPtr]) Swap(i, j int) {
 	nfID[i], nfID[j] = nfID[j], nfID[i]
 }
